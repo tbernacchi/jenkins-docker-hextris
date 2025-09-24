@@ -36,7 +36,7 @@ docker compose up -d
 
 ### 2. Access web interface
 
-- URL: http://localhost:8082
+- URL: http://localhost:8082   # Mine it's set on `192.168.1.100`
 - Username: admin
 - Password: admin123
 
@@ -50,19 +50,6 @@ docker compose up -d
 - **New Item** → **Pipeline**
 - **Repository URL**: `https://github.com/tbernacchi/arrc.git`
 - **Script Path**: `jenkins/Jenkinsfile`
-
-### 5. Check status
-
-```bash
-docker compose ps
-docker compose logs jenkins
-```
-
-### 6. Stop services
-
-```bash
-docker compose down
-```
 
 ## File structure
 
@@ -92,17 +79,17 @@ docker compose down
 The pipeline requires the following credentials to be configured in Jenkins:
 
 ### 1. **Docker Hub Credentials** (Required for Build & Push)
-- **ID**: `docker-hub-credentials` 
+- **ID**: `docker-hub-credentials`  # Mine.
 - **Type**: Username with password
 - **Purpose**: Login to Docker Hub to push built images
-- **Status**: ✅ Already configured
+
 
 ### 2. **GitHub Token** (Required for Code Checkout)
-- **ID**: `jenkins pat token` (or similar)
+- **ID**: `jenkins pat token` (or similar) # Mine.
 - **Type**: Username with password
 - **Purpose**: Access to private GitHub repository
 - **Your ID**: `f9b98027-b745-4cc5-9346-fa0e6fec2d28`
-- **Status**: ✅ Already configured
+
 
 ### Current Pipeline Authentication:
 - **Docker Hub**: Uses `docker-hub-credentials` for build and push
@@ -135,27 +122,11 @@ For ArgoCD to access private repositories, configure GitHub credentials via UI:
 
 ### Essential plugins for the project:
 
-#### **Pipeline** (required)
-- Main plugin to execute Jenkinsfile
-- Syntax `pipeline { ... }`
-- Stages and steps
-
-#### **Kubernetes** (required)
-- To use `agent { kubernetes { ... } }`
-- Executes each stage in separate pods
-- Connects Jenkins with K8s cluster
-
-#### **Pipeline: Stage View** (recommended)
-- Pipeline stages visualization
-- Improved graphical interface
-
-#### **Git** (included)
-- Git repositories integration
-- Automatic code checkout
-
-#### **Docker Workflow** (included)
-- Docker commands support
-- Image build and push
+#### **Pipeline** 
+#### **Kubernetes** 
+#### **Pipeline: Stage View** 
+#### **Git** 
+#### **Docker Workflow** 
 
 ### How to install:
 
@@ -165,8 +136,6 @@ For ArgoCD to access private repositories, configure GitHub credentials via UI:
    - ✅ Pipeline
    - ✅ Kubernetes
    - ✅ Pipeline: Stage View
-   - ✅ SonarQube Scanner
-   - ✅ SonarQube Scanner for Jenkins
 4. **Install without restart**
 
 ### Configure Kubernetes Plugin:
