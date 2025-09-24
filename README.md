@@ -1,6 +1,6 @@
 # Jenkins with Kubernetes Support
 
-This project configures a Jenkins instance with complete Kubernetes support using Docker Compose.
+> This project configures a Jenkins instance with complete Kubernetes support using Docker Compose.
 
 ## Prerequisites
 
