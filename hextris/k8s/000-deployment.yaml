@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arrc-app
+  namespace: hextris
+  labels:
+    app: arrc-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: arrc-app
+  template:
+    metadata:
+      labels:
+        app: arrc-app
+    spec:
+      imagePullSecrets:
+      - name: docker-registry
+      containers:
+      - name: arrc-app
+        image: tadeuuuuu/arrc-app:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 101
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+        - name: nginx-tmp
+          mountPath: /tmp
+      volumes:
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: arrc-app-service
+  namespace: hextris
+  labels:
+    app: arrc-app
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: arrc-app

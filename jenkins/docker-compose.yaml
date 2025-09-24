@@ -1,0 +1,19 @@
+services:
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    container_name: jenkins
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./plugins.txt:/usr/share/jenkins/ref/plugins.txt
+      - ~/.kube:/root/.kube
+    environment:
+      - JENKINS_OPTS=--httpPort=8082
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+
+volumes:
+  jenkins_home:

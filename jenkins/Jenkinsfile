@@ -1,0 +1,244 @@
+pipeline {
+    agent {
+                kubernetes {
+                    yaml """
+                        apiVersion: v1
+                        kind: Pod
+                        spec:
+                          containers:
+                          - name: jnlp
+                            image: jenkins/inbound-agent:latest
+                            args: ['\$(JENKINS_SECRET)', '\$(JENKINS_NAME)']
+                          - name: podman
+                            image: quay.io/podman/stable:latest
+                            command:
+                            - cat
+                            tty: true
+                            securityContext:
+                              privileged: true
+                          - name: kubectl
+                            image: bitnami/kubectl:latest
+                            command:
+                            - cat
+                            tty: true
+                          volumes:
+                          - name: kubeconfig
+                            secret:
+                              secretName: jenkins-kubeconfig
+                              defaultMode: 0600
+                              items:
+                              - key: config
+                                path: config
+                    """
+                }
+    }
+    
+    environment {
+        DOCKER_REGISTRY = 'docker.io'
+        IMAGE_NAME = 'tadeuuuuu/arrc-app'
+        // IMAGE_TAG will be set from .version file in stage 2.1
+    }
+    
+    stages {
+        stage('1. Test Credentials') {
+            steps {
+                script {
+                    try {
+                        def sonarToken = credentials('sonar-token')
+                        echo "Sonar token found: ${sonarToken.toString().substring(0, 10)}..."
+                        env.SONAR_TOKEN = sonarToken
+                    } catch (Exception e) {
+                        echo "Sonar token error: ${e.getMessage()}"
+                    }
+                    
+                    try {
+                        def dockerUser = credentials('docker-hub-username')
+                        echo "Docker username found: ${dockerUser.toString()}"
+                    } catch (Exception e) {
+                        echo "Docker username error: ${e.getMessage()}"
+                    }
+                    
+                    try {
+                        def dockerPass = credentials('docker-hub-password')
+                        echo "Docker password found: ${dockerPass.toString().substring(0, 10)}..."
+                    } catch (Exception e) {
+                        echo "Docker password error: ${e.getMessage()}"
+                    }
+                }
+            }
+        }
+        
+        stage('2. Code Checkout') {
+            steps {
+                echo 'Checking out code...'
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+        
+        stage('2.1. Read Version') {
+            steps {
+                echo 'Reading version from hextris/.version file...'
+                script {
+                    env.APP_VERSION = sh(
+                        script: 'cat hextris/.version',
+                        returnStdout: true
+                    ).trim()
+                    echo "App version: ${env.APP_VERSION}"
+                    // Update IMAGE_TAG to use version instead of BUILD_NUMBER
+                    env.IMAGE_TAG = "${env.APP_VERSION}"
+                }
+            }
+        }
+        
+        
+        stage('3. Static Analysis') {
+            steps {
+                echo 'Running static analysis for HTML/CSS/JS...'
+                script {
+                    sh """
+                        echo "Checking static files..."
+                        echo "HTML files:"
+                        find . -name "*.html" | head -10
+                        
+                        echo "CSS files:"
+                        find . -name "*.css" | head -10
+                        
+                        echo "JS files:"
+                        find . -name "*.js" | head -10
+                        
+                        echo "Checking file sizes..."
+                        find . -name "*.html" -o -name "*.css" -o -name "*.js" | xargs ls -lh
+                        
+                        echo "Validating main files exist..."
+                        if [ -f "hextris/index.html" ]; then
+                            echo "✓ Main HTML file exists"
+                        else
+                            echo "✗ Main HTML file missing"
+                            exit 1
+                        fi
+                        
+                        if [ -d "hextris/js" ]; then
+                            echo "✓ JS directory exists"
+                        else
+                            echo "✗ JS directory missing"
+                            exit 1
+                        fi
+                        
+                        if [ -d "hextris/style" ]; then
+                            echo "✓ CSS directory exists"
+                        else
+                            echo "✗ CSS directory missing"
+                            exit 1
+                        fi
+                        
+                        echo "Static analysis completed successfully!"
+                    """
+                }
+            }
+        }
+        
+        stage('4. Build and Push') {
+            steps {
+                echo 'Building application with Podman...'
+                container('podman') {
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                        sh """
+                            echo "Testing Docker Hub login..."
+                            echo "Username: \$DOCKER_USERNAME"
+                            
+                            echo "Logging into Docker Hub..."
+                            if echo \$DOCKER_PASSWORD | podman login -u \$DOCKER_USERNAME --password-stdin docker.io; then
+                                echo "Login successful!"
+                            else
+                                echo "Login failed!"
+                                exit 1
+                            fi
+                            
+                            echo "Building static app using hextris Dockerfile..."
+                            cd hextris
+                            if podman build --pull-always -t ${IMAGE_NAME}:${IMAGE_TAG} .; then
+                                echo "Build successful!"
+                                podman tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+                                echo "Image built: ${IMAGE_NAME}:${IMAGE_TAG}"
+                                echo "Image built: ${IMAGE_NAME}:latest"
+                                
+                                echo "Pushing image to Docker Hub..."
+                                if podman push ${IMAGE_NAME}:${IMAGE_TAG}; then
+                                    echo "Push successful: ${IMAGE_NAME}:${IMAGE_TAG}"
+                                else
+                                    echo "Push failed!"
+                                    exit 1
+                                fi
+                                
+                                if podman push ${IMAGE_NAME}:latest; then
+                                    echo "Push successful: ${IMAGE_NAME}:latest"
+                                else
+                                    echo "Push failed!"
+                                    exit 1
+                                fi
+                            else
+                                echo "Build failed!"
+                                exit 1
+                            fi
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('5. Deploy to Kubernetes') {
+            steps {
+                echo 'Deploying to Kubernetes cluster...'
+                sh """
+                    echo "Installing kubectl for ARM64..."
+                    curl -LO "https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/arm64/kubectl"
+                    chmod +x kubectl
+                    export PATH=\$(pwd):\$PATH
+                    
+                    echo "Configuring kubectl with token..."
+                    kubectl config set-cluster kubernetes --server=https://192.168.1.106:6443 --insecure-skip-tls-verify=true
+                    kubectl config set-credentials jenkins --token=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                    kubectl config set-context jenkins --cluster=kubernetes --user=jenkins
+                    kubectl config use-context jenkins
+                    
+                    echo "Testing kubectl connection..."
+                    kubectl version --client
+                    
+                    echo "Updating image tag in deployment manifest..."
+                    cd hextris/k8s
+                    sed -i 's|image: .*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' 001-deployment.yaml
+                    echo "Updated deployment manifest with image: ${IMAGE_NAME}:${IMAGE_TAG}"
+                    
+                    echo "Deploying using kubectl..."
+                    kubectl apply -f 001-deployment.yaml
+                    kubectl apply -f 001-ingress.yaml
+                    
+                    echo "Getting deployment info..."
+                    kubectl get deployment -n hextris || true
+                    kubectl get svc -n hextris || true
+                    kubectl get pods -n hextris || true
+                """
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Pipeline completed'
+        }
+        success {
+            echo 'Pipeline succeeded!'
+            // Optional: Send success notification
+        }
+        failure {
+            echo 'Pipeline failed!'
+            // Optional: Send failure notification
+        }
+    }
+}

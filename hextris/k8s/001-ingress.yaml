@@ -1,0 +1,47 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-hextris-prefix
+  namespace: hextris
+spec:
+  stripPrefix:
+    prefixes:
+      - /hextris
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: hextris-redirect
+  namespace: hextris
+spec:
+  redirectRegex:
+    regex: "^https://traefik.mykubernetes.com/hextris$"
+    replacement: "https://traefik.mykubernetes.com/hextris/"
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: hextris-ingress
+  namespace: hextris
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: |
+        Host(`traefik.mykubernetes.com`) && Path(`/hextris`)
+      middlewares:
+        - name: hextris-redirect
+      services:
+        - name: hextris-service
+          port: 80
+    - kind: Rule
+      match: |
+        Host(`traefik.mykubernetes.com`) && PathPrefix(`/hextris/`)
+      middlewares:
+        - name: strip-hextris-prefix
+      services:
+        - name: hextris-service
+          port: 80
+  tls: {}  # Wildcard/default certificate
