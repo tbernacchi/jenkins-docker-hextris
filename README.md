@@ -197,3 +197,60 @@ cat ca.crt
 - **Credentials**: Select `k8s-token`
 - **Jenkins URL**: `http://192.168.1.100:8082` # Your local IP address (It's a docker.)
 - **Test Connection**: Should show "Connection test successful"
+
+## Troubleshooting
+
+### ArgoCD Application Deletion Issues
+
+**Problem**: ArgoCD application gets stuck in deletion state and won't complete deletion.
+
+**Symptoms**:
+- Application shows `deletionTimestamp` but remains in cluster
+- Warning: "Immediate deletion does not wait for confirmation that the running resource has been terminated"
+- Application status shows `deletionGracePeriodSeconds: 0`
+
+**Root Cause**: ArgoCD finalizers prevent deletion until all managed resources are cleaned up.
+
+**Solution**:
+```bash
+# Check if application has finalizers
+kubectl get application <app-name> -n argocd -o yaml | grep finalizers
+
+# Remove finalizers to force deletion
+kubectl patch application <app-name> -n argocd -p '{"metadata":{"finalizers":[]}}' --type=merge
+```
+
+**Example**:
+```bash
+# For arrc-hextris application
+kubectl patch application arrc-hextris -n argocd -p '{"metadata":{"finalizers":[]}}' --type=merge
+```
+
+### ArgoCD Sync Issues
+
+**Problem**: ArgoCD application shows "Unknown" sync status or fails to sync.
+
+**Symptoms**:
+- Sync status: "Unknown" or "ComparisonError"
+- Error: "Repository not found" or "authentication required"
+- Application spec shows different repoURL than expected
+
+**Root Cause**: ArgoCD is using cached/old repository configuration.
+
+**Solution**:
+```bash
+# Check current repository URL
+kubectl get application <app-name> -n argocd -o jsonpath='{.spec.source.repoURL}'
+
+# Update repository URL if incorrect
+kubectl patch application <app-name> -n argocd --type merge -p '{"spec":{"source":{"repoURL":"https://github.com/correct/repo.git"}}}'
+
+# Force refresh/sync
+kubectl patch application <app-name> -n argocd --type merge -p '{"operation":{"sync":{"revision":"HEAD"}}}'
+```
+
+**Example**:
+```bash
+# Update repository URL for arrc-hextris
+kubectl patch application arrc-hextris -n argocd --type merge -p '{"spec":{"source":{"repoURL":"https://github.com/tadeu/jenkins-docker-hextris.git"}}}'
+```

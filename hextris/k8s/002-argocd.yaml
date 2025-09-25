@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/tbernacchi/arrc.git
+    repoURL: https://github.com/tbernacchi/jenkins-docker-hextris.git
     targetRevision: HEAD
     path: hextris/k8s
   destination:
