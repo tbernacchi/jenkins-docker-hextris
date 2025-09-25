@@ -30,11 +30,11 @@ spec:
   routes:
     - kind: Rule
       match: |
-        Host(`traefik.mykubernetes.com`) && Path(`/hextris`)
+        (Host(`traefik.mykubernetes.com`) || Host(`192.168.1.106`)) && Path(`/hextris`)
       middlewares:
         - name: hextris-redirect
       services:
-        - name: hextris-service
+        - name: arrc-app-service
           port: 80
     - kind: Rule
       match: |
@@ -42,6 +42,6 @@ spec:
       middlewares:
         - name: strip-hextris-prefix
       services:
-        - name: hextris-service
+        - name: arrc-app-service
           port: 80
   tls: {}  # Wildcard/default certificate
